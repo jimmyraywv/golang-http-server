@@ -1,0 +1,21 @@
+#Requires AWS Load Balancer Controller - https://github.com/kubernetes-sigs/aws-load-balancer-controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "read-only"
+  namespace: "read-only"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  labels:
+    app: read-only
+spec:
+  rules:
+    - host: "readonly.<YOUR_DOMAIN>"
+      http:
+        paths:
+          - path: /*
+            backend:
+              serviceName: "read-only"
+              servicePort: 80

@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: read-only
+  labels:
+    owner: jimmy
+    env: dev
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: read-only
+  namespace: read-only
+---
+apiVersion: apps/v1  
+kind: Deployment  
+metadata:  
+  name: read-only  
+  namespace: read-only
+  labels:  
+    app: read-only
+    owner: jimmy
+    env: dev
+spec: 
+  # topologySpreadConstraints:
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: DoNotSchedule
+  #   labelSelector:
+  #     matchLabels:
+  #       app: read-only
+  revisionHistoryLimit: 3  #defaults to 10
+  selector:  
+    matchLabels:  
+      app: read-only 
+  replicas: 5
+  strategy:  
+    type: RollingUpdate  
+    rollingUpdate:  
+      maxSurge: 10  
+      maxUnavailable: 1 
+  template:  
+    metadata:  
+      labels:  
+        app: read-only
+        owner: jimmy      
+        env: dev
+    spec:  
+      serviceAccountName: read-only  
+      securityContext:
+        fsGroup: 2000 
+      containers:  
+      - name: read-only  
+        image: public.ecr.aws/r2l1x4g2/go-http-server:v0.1.0-23ffe0a715
+        imagePullPolicy: IfNotPresent
+        securityContext:  
+          allowPrivilegeEscalation: false  
+          runAsUser: 0
+          readOnlyRootFilesystem: true
+        resources:  
+          limits:  
+            cpu: 200m  
+            memory: 20Mi  
+          requests:  
+            cpu: 100m  
+            memory: 10Mi  
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        ports:  
+          - containerPort: 8080
+        volumeMounts:
+          - mountPath: /tmp
+            name: tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: read-only-pdb
+  namespace: read-only
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: read-only
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: read-only
+  namespace: read-only
+  labels:
+    app: read-only
+    owner: jimmy
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  type: NodePort
+  selector:
+    app: read-only
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: read-only-allow-port-8080
+  namespace: read-only
+  labels:
+    app: read-only
+    owner: jimmy
+spec:
+  podSelector:
+    matchLabels:
+      app: read-only
+  ingress:
+  - ports:
+    - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+ name: default-deny-in
+ namespace: read-only
+spec:
+ podSelector: {}
+ policyTypes:
+ - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-out
+  namespace: read-only
+  labels:
+    app: read-only
+    owner: jimmy
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+
+
